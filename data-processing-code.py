@@ -448,7 +448,7 @@ def generate_summary_visualizations(integrated_df, output_dir):
     plt.xticks(rotation=45)
     plt.legend(title='Data Source')
     plt.tight_layout()
-    plt.savefig(f'{output_dir}/concentration_by_environment.png', dpi=300)
+    plt.savefig(f'{output_dir}/concentration_by_environment_01.png', dpi=300)
     plt.close()
 
     # 2. Time series of concentrations (Taiwan data only)
@@ -471,7 +471,7 @@ def generate_summary_visualizations(integrated_df, output_dir):
         plt.legend(title='Beach')
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig(f'{output_dir}/temporal_trends.png', dpi=300)
+        plt.savefig(f'{output_dir}/temporal_trends_01.png', dpi=300)
         plt.close()
 
     # 3. Shape distribution
@@ -492,7 +492,7 @@ def generate_summary_visualizations(integrated_df, output_dir):
     plt.legend(title='Data Source')
     chart.set_yscale('log')
     plt.tight_layout()
-    plt.savefig(f'{output_dir}/shape_distribution.png', dpi=300)
+    plt.savefig(f'{output_dir}/shape_distribution_01.png', dpi=300)
     plt.close()
 
     # 4. Beach zone distribution (Taiwan only)
@@ -512,7 +512,7 @@ def generate_summary_visualizations(integrated_df, output_dir):
     plt.xticks(rotation=45)
     plt.legend(title='Size Class')
     plt.tight_layout()
-    plt.savefig(f'{output_dir}/beach_zone_distribution.png', dpi=300)
+    plt.savefig(f'{output_dir}/beach_zone_distribution_01.png', dpi=300)
     plt.close()
 
     print("Visualizations saved to", output_dir)
