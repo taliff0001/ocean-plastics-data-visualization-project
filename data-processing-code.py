@@ -12,6 +12,17 @@ import re
 plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette('viridis')
 
+def clean_doer_year(val):
+    if pd.isna(val):
+        return None
+    if val.lower() in ["n/r", "na", "none", "missing"]:
+        return None
+    years = re.findall(r"\b(19\d{2}|20\d{2})\b", val)
+    
+    if years:
+        return years[0]  # Keep the first valid year
+    return None  # If no valid year is found
+
 
 # Function to load and process DOER dataset
 def process_doer_data(file_path):
@@ -67,39 +78,18 @@ def process_doer_data(file_path):
 
     # Create year and decade columns for temporal analysis
     # Make sure Sample Time is numeric
-    filtered_df['Year'] = pd.to_numeric(filtered_df['Sample Time'], errors='coerce')
-    # For decade calculation, handle any remaining NaN values
-    filtered_df['Decade'] = ((filtered_df['Year'] // 10) * 10).fillna(-1).astype('Int64')
-
-    # Create log-transformed concentration for visualization
-    filtered_df['log_concentration'] = np.log10(filtered_df['mp/kg dw'] + 1)
+    filtered_df['Year'] =  filtered_df['Sample Time'].apply(clean_doer_year)
 
     # Add source column for later integration
     filtered_df['source'] = 'DOER Database'
 
-    # Create region column for broader geographic analysis
-    def assign_region(continent, country):
-        if continent == 'Asia':
-            if country in ['China', 'Japan', 'South Korea', 'Taiwan']:
-                return 'East Asia'
-            elif country in ['Thailand', 'Vietnam', 'Malaysia', 'Indonesia', 'Philippines']:
-                return 'Southeast Asia'
-            else:
-                return 'Other Asia'
-        else:
-            return continent
-
-    filtered_df['region'] = filtered_df.apply(
-        lambda row: assign_region(row['Continent'], row['Country']), axis=1
-    )
-
     # Select relevant columns
     selected_columns = [
-        'mpID', 'Continent', 'Country', 'region', 'System', 'Waterbody',
-        'Zone Area', 'Tidal Zone', 'Test Area', 'Year', 'Decade',
-        'mp/kg dw', 'log_concentration', 'MP Unit',
+        'mpID', 'Continent', 'Country', 'System', 'Waterbody',
+        'Zone Area', 'Tidal Zone', 'Test Area', 'Year',
+        'mp/kg dw', 'MP Unit',
         'Standardized_Shapes', 'Dominant Size', 'Colors',
-        'source', 'DOI'
+        'source'
     ]
 
     return filtered_df[selected_columns]
@@ -144,8 +134,6 @@ def process_taiwan_data(particle_files, shape_files, color_files):
         axis=1
     )
 
-    # Create log-transformed concentration for visualization
-    particle_df['log_concentration'] = np.log10(particle_df['particles_per_kg'] + 1)
 
     # Convert date to datetime
     particle_df['Date'] = pd.to_datetime(particle_df['Date_YYYY-MM-DD'])
@@ -314,9 +302,9 @@ def process_taiwan_data(particle_files, shape_files, color_files):
 
     # Select relevant columns for integration with DOER data
     selected_columns = [
-        'sample_id', 'Continent', 'Country', 'region', 'System', 'Waterbody',
+        'sample_id', 'Continent', 'Country', 'System', 'Waterbody',
         'Zone Area', 'Tidal_Zone', 'Test_Area', 'Year', 'Date',
-        'mp/kg dw', 'log_concentration', 'Size_class',
+        'mp/kg dw', 'Size_class',
         'Standardized_Shapes', 'Dominant_Size', 'dominant_color',
         'source', 'Season'
     ]
@@ -346,13 +334,18 @@ def integrate_datasets(doer_df, taiwan_df):
     doer_copy['sample_id'] = 'DOER_' + doer_copy['mpID'].astype(str).fillna('0')
 
     # Add missing columns to DOER data
-    doer_copy['Date'] = pd.NaT
+    doer_copy['Date'] = "unknown"
     doer_copy['Season'] = None
     doer_copy['Size_class'] = doer_copy['Dominant Size'].apply(
         lambda x: 'microplastics' if 'mm' in str(x) and any(d in str(x) for d in ['<1', '<2', '<3', '<5'])
         else 'mesoplastics' if 'mm' in str(x) and any(d in str(x) for d in ['1 to 5', '5'])
         else 'unknown'
     )
+    """FIXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXFIXXXX
+    XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXFIXXXXXXXXXX
+    XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXFIXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXFIXX
+    XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXFIXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+    XXXXFIXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXFIXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"""
 
     # Rename DOER columns for consistency
     doer_copy = doer_copy.rename(columns={
@@ -366,10 +359,9 @@ def integrate_datasets(doer_df, taiwan_df):
 
     # Select common columns for integration
     common_columns = [
-        'sample_id', 'Continent', 'Country', 'region', 'System', 'Waterbody',
+        'sample_id', 'Continent', 'Country', 'System', 'Waterbody',
         'Zone Area', 'Tidal_Zone', 'Test_Area', 'Year', 'Date',
-        'mp/kg dw', 'log_concentration', 'Size_class',
-        'Standardized_Shapes', 'Dominant_Size', 'dominant_color',
+        'mp/kg dw',  'Size_class', 'Dominant_Size', 'dominant_color',
         'source'
     ]
 
@@ -419,103 +411,11 @@ def integrate_datasets(doer_df, taiwan_df):
     return integrated_df
 
 
-# Function to generate summary visualizations
-def generate_summary_visualizations(integrated_df, output_dir):
-    """
-    Generate summary visualizations for the integrated dataset.
-
-    Args:
-        integrated_df: Integrated DataFrame
-        output_dir: Directory to save visualizations
-    """
-    print("Generating summary visualizations...")
-
-    # Create output directory if it doesn't exist
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-
-    # 1. Concentration comparison by environment
-    plt.figure(figsize=(12, 7))
-    sns.boxplot(
-        data=integrated_df,
-        x='environment_type',
-        y='log_concentration',
-        hue='source',
-        palette='Set2'
-    )
-    plt.title('Microplastic Concentrations by Environment Type', fontsize=14)
-    plt.xlabel('Environment Type', fontsize=12)
-    plt.ylabel('Log10(Particles per kg)', fontsize=12)
-    plt.xticks(rotation=45)
-    plt.legend(title='Data Source')
-    plt.tight_layout()
-    plt.savefig(f'{output_dir}/concentration_by_environment.png', dpi=300)
-    plt.close()
-
-    # 2. Time series of concentrations (Taiwan data only)
-    taiwan_df = integrated_df[integrated_df['source'] == 'Taiwan Beaches'].copy()
-    taiwan_df = taiwan_df.sort_values('Date')
-
-    if not taiwan_df.empty and pd.notna(taiwan_df['Date']).any():
-        # Group by date and beach
-        time_series = taiwan_df.groupby(['Date', 'Waterbody'])['mp/kg dw'].mean().reset_index()
-
-        plt.figure(figsize=(14, 7))
-
-        for beach in time_series['Waterbody'].unique():
-            beach_data = time_series[time_series['Waterbody'] == beach]
-            plt.plot(beach_data['Date'], beach_data['mp/kg dw'], marker='o', linewidth=2, label=beach)
-
-        plt.title('Temporal Trends in Microplastic Concentration', fontsize=14)
-        plt.xlabel('Date', fontsize=12)
-        plt.ylabel('Particles per kg (dry weight)', fontsize=12)
-        plt.legend(title='Beach')
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.savefig(f'{output_dir}/temporal_trends.png', dpi=300)
-        plt.close()
-
-    # 3. Shape distribution
-    shape_counts = integrated_df.groupby(['source', 'Standardized_Shapes']).size().reset_index(name='count')
-
-    plt.figure(figsize=(12, 7))
-    chart = sns.barplot(
-        data=shape_counts,
-        x='Standardized_Shapes',
-        y='count',
-        hue='source',
-        palette='Set2'
-    )
-    plt.title('Distribution of Plastic Shapes by Data Source', fontsize=14)
-    plt.xlabel('Shape Category', fontsize=12)
-    plt.ylabel('Count', fontsize=12)
-    plt.xticks(rotation=45)
-    plt.legend(title='Data Source')
-    chart.set_yscale('log')
-    plt.tight_layout()
-    plt.savefig(f'{output_dir}/shape_distribution.png', dpi=300)
-    plt.close()
-
-    # 4. Beach zone distribution (Taiwan only)
-    beach_zone_data = taiwan_df.groupby(['Tidal_Zone', 'Size_class'])['mp/kg dw'].mean().reset_index()
-
-    plt.figure(figsize=(14, 8))
-    chart = sns.barplot(
-        data=beach_zone_data,
-        x='Tidal_Zone',
-        y='mp/kg dw',
-        hue='Size_class',
-        palette='Blues'
-    )
-    plt.title('Microplastic Concentration by Beach Zone', fontsize=14)
-    plt.xlabel('Beach Zone', fontsize=12)
-    plt.ylabel('Average Particles per kg', fontsize=12)
-    plt.xticks(rotation=45)
-    plt.legend(title='Size Class')
-    plt.tight_layout()
-    plt.savefig(f'{output_dir}/beach_zone_distribution.png', dpi=300)
-    plt.close()
-
-    print("Visualizations saved to", output_dir)
+def drop_bad_data(df) -> pd.DataFrame:
+    df = df.dropna(subset=['sample_id'])
+    df = df[df['Continent'] != 'Oceania']
+    df = df.dropna(subset=['Year'])
+    return df
 
 
 # Main function to run the entire process
@@ -567,13 +467,11 @@ def main():
 
     # Integrate datasets
     integrated_df = integrate_datasets(doer_df, taiwan_df)
+    integrated_df = drop_bad_data(integrated_df)
 
     # Save processed data
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     integrated_df.to_csv(f'{output_dir}/integrated_ocean_plastics.csv', index=False)
-
-    # Generate visualizations
-    generate_summary_visualizations(integrated_df, output_dir)
 
     print("Data processing complete!")
 
